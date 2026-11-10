@@ -1,0 +1,24 @@
+version: 2
+
+seeds:
+  - name: brands
+    description: >
+      Brand registry - config as data. `pulse ingest` reads this same file, so adding a
+      brand is one row here, with no code change and no redeploy.
+    config:
+      column_types:
+        is_active: boolean
+    columns:
+      - name: brand_id
+        data_tests: [unique, not_null]
+      - name: category
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [sportswear, streaming, ai_assistants]
+      - name: articles
+        description: >
+          Current Wikipedia title, then former titles separated by `|`. The pageviews API
+          counts exact titles and does not follow redirects; `pulse check-registry` checks
+          that every former title redirects to the current one.
+        data_tests: [not_null]

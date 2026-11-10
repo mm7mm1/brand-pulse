@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  python-and-dbt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[transform,dashboard,dev]"
+      - name: Lint
+        run: |
+          ruff check src tests dashboard
+          ruff format --check src tests dashboard
+      - name: Unit tests
+        run: pytest -q
+      # The whole dbt DAG on a synthetic lake written by the real ingestion code:
+      # models compile and run, unit tests and data tests pass - no network, no creds
+      - name: dbt build on synthetic data
+        run: |
+          python tests/make_sample_lake.py data/lake
+          cd transform && dbt build --profiles-dir .
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate

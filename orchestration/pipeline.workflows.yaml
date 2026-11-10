@@ -1,0 +1,21 @@
+# Daily pipeline: ingest into the lake, then dbt build + freshness. The connector waits
+# for each job execution; a failed job fails the execution, which logs an ERROR and
+# triggers the alert policy. A partial ingest (some brands skipped) exits 0, so the
+# marts are still rebuilt for everything that did arrive.
+main:
+  steps:
+    - init:
+        assign:
+          - project: ${sys.get_env("GOOGLE_CLOUD_PROJECT_ID")}
+          - region: ${sys.get_env("GOOGLE_CLOUD_LOCATION")}
+          - jobs_prefix: ${"projects/" + project + "/locations/" + region + "/jobs/"}
+    - ingest:
+        call: googleapis.run.v2.projects.locations.jobs.run
+        args:
+          name: ${jobs_prefix + sys.get_env("INGEST_JOB")}
+    - transform:
+        call: googleapis.run.v2.projects.locations.jobs.run
+        args:
+          name: ${jobs_prefix + sys.get_env("TRANSFORM_JOB")}
+    - done:
+        return: "ok"

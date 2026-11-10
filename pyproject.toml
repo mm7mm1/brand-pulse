@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "brand-pulse"
+version = "0.1.0"
+description = "Brand attention analytics: Wikipedia pageviews -> parquet lake -> dbt medallion -> dashboard"
+requires-python = ">=3.11"
+dependencies = [
+    "requests==2.32.3",
+    "pyarrow==17.0.0",
+]
+
+[project.optional-dependencies]
+transform = ["dbt-core==1.10.8", "dbt-duckdb==1.9.6"]
+bigquery = ["dbt-core==1.10.8", "dbt-bigquery==1.10.3"]
+dashboard = ["streamlit==1.40.1", "duckdb==1.1.3"]
+dev = ["pytest==8.3.3", "ruff==0.7.4"]
+
+[project.scripts]
+pulse = "pulse.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]

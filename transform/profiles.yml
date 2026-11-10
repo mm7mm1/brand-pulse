@@ -1,0 +1,16 @@
+brand_pulse:
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('PULSE_DUCKDB_PATH', '../data/warehouse.duckdb') }}"
+      schema: silver
+      threads: 4
+    prod:
+      type: bigquery
+      method: oauth   # the Cloud Run job's service account, through ADC
+      project: "{{ env_var('GCP_PROJECT', 'unset') }}"
+      dataset: silver
+      location: US
+      threads: 8
+      job_execution_timeout_seconds: 600

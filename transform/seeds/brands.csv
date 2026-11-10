@@ -1,0 +1,16 @@
+brand_id,brand_name,category,wiki_project,articles,is_active
+nike,Nike,sportswear,en.wikipedia,"Nike,_Inc.",true
+adidas,Adidas,sportswear,en.wikipedia,Adidas,true
+puma,Puma,sportswear,en.wikipedia,Puma_(brand),true
+new_balance,New Balance,sportswear,en.wikipedia,New_Balance,true
+asics,ASICS,sportswear,en.wikipedia,Asics|ASICS,true
+netflix,Netflix,streaming,en.wikipedia,Netflix,true
+disney_plus,Disney+,streaming,en.wikipedia,Disney+,true
+hbo_max,HBO Max,streaming,en.wikipedia,HBO_Max,true
+prime_video,Prime Video,streaming,en.wikipedia,Amazon_Prime_Video,true
+apple_tv,Apple TV,streaming,en.wikipedia,Apple_TV_(streaming_service)|Apple_TV+,true
+chatgpt,ChatGPT,ai_assistants,en.wikipedia,ChatGPT,true
+gemini,Gemini,ai_assistants,en.wikipedia,Google_Gemini,true
+claude,Claude,ai_assistants,en.wikipedia,Claude_(AI)|Claude_(language_model),true
+perplexity,Perplexity,ai_assistants,en.wikipedia,Perplexity_AI,true
+copilot,Microsoft Copilot,ai_assistants,en.wikipedia,Microsoft_Copilot,true

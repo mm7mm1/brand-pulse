@@ -1,0 +1,23 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: >
+      Raw layer: parquet files written by `pulse ingest`, one per brand-month. Read in
+      place - DuckDB globs the lake, BigQuery reads it as an external table over GCS.
+    schema: bronze
+    meta:
+      external_location: "{{ env_var('PULSE_LAKE_URI', '../data/lake') }}/{name}/*/*.parquet"
+    loaded_at_field: _loaded_at
+    freshness:
+      warn_after: {count: 30, period: hour}
+      error_after: {count: 54, period: hour}
+    tables:
+      - name: pageviews
+        columns:
+          - name: brand_id
+          - name: date
+          - name: views
+            description: Summed over the brand's current and former titles; 0 on quiet days.
+          - name: _loaded_at
+            description: When the slice was fetched; a whole month shares one value.

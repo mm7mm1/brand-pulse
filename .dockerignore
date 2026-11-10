@@ -1,0 +1,7 @@
+.venv
+data
+.git
+transform/target
+transform/logs
+infra/.terraform
+**/__pycache__

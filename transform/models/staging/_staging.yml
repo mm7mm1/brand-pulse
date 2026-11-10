@@ -1,0 +1,19 @@
+version: 2
+
+models:
+  - name: stg_wiki__pageviews
+    description: Daily pageviews per brand article, typed.
+    columns:
+      - name: brand_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_brands')
+                field: brand_id
+      - name: view_date
+        data_tests: [not_null]
+      - name: views
+        data_tests: [not_null]
+  - name: stg_brands
+    description: The brand registry, as loaded from the seed.

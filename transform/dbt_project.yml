@@ -1,0 +1,28 @@
+name: brand_pulse
+version: "1.0.0"
+config-version: 2
+profile: brand_pulse
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target", "dbt_packages"]
+
+vars:
+  lookback_days: 3        # days an incremental run rebuilds; matches the ingestion lookback
+  buzz_baseline_days: 28  # trailing days a buzz event is measured against
+  buzz_z_threshold: 3
+
+seeds:
+  brand_pulse:
+    +schema: config
+
+models:
+  brand_pulse:
+    staging:
+      +schema: silver
+      +materialized: view
+    marts:
+      +schema: gold
+      +materialized: table
