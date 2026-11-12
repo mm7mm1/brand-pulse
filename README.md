@@ -13,10 +13,15 @@ The same code runs in two modes:
 | Orchestration | `make pipeline` | Cloud Scheduler -> Workflows -> Cloud Run jobs |
 | Alerting | exit codes | log-based alert policy -> email |
 
-**Hosted demo.** A daily GitHub Action (`refresh.yml`) rebuilds the last year from the
-API, runs the dbt build with all its tests, and publishes the gold tables as parquet to
-the `snapshot` branch; the dashboard on Streamlit Community Cloud reads that snapshot.
-A failed step publishes nothing, so the live dashboard keeps the previous day.
+**Live demo: https://pulse-dashboard-dwtxo5ugja-uc.a.run.app** - the Google Cloud
+deployment below: Cloud Scheduler runs the pipeline every morning, and the dashboard, a
+Cloud Run service, reads `gold` from BigQuery. It scales to zero, so the first visit after
+a quiet spell takes ~20 s.
+
+Without a cloud project, a daily GitHub Action (`refresh.yml`) rebuilds the last year from
+the API, runs the dbt build with all its tests, and publishes the gold tables as parquet to
+the `snapshot` branch; the dashboard reads that snapshot when it has neither BigQuery nor a
+local warehouse. A failed step publishes nothing, so the snapshot keeps the previous day.
 
 ## Architecture
 
@@ -32,13 +37,13 @@ flowchart LR
         ING -->|brand-month<br/>parquet slices| LAKE[(GCS lake<br/>bronze)]
         LAKE -->|external table| SIL[(silver<br/>staging views)]
         DBT --> SIL --> GOLD[(gold<br/>marts)]
+        GOLD --> DASH[Cloud Run service<br/>Streamlit dashboard]
         LOGS[Cloud Logging<br/>JSON severity] --> ALERT[Alert policy]
     end
 
     API --> ING
     REG -.-> ING
     REG -.-> DBT
-    GOLD --> DASH[Dashboard]
 ```
 
 **Gold marts**
@@ -109,7 +114,8 @@ Lineage graph: `make docs`.
 gcloud storage buckets create gs://<project>-tfstate --location=US
 cd infra && terraform init -backend-config="bucket=<project>-tfstate"
 terraform apply -var project_id=<project> -target=google_project_service.apis \
-  -target=google_artifact_registry_repository.pulse          # APIs and the image registry first
+  -target=google_artifact_registry_repository.pulse \
+  -target=google_project_iam_member.builder                  # APIs, registry and build roles first
 gcloud builds submit .. --tag us-central1-docker.pkg.dev/<project>/brand-pulse/brand-pulse:latest
 terraform apply -var project_id=<project> [-var alert_email=<email>]
 gcloud run jobs execute pulse-ingest --region us-central1 --args=ingest,--start,<YYYY-MM-DD> --wait
