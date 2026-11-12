@@ -44,6 +44,7 @@ resource "google_storage_bucket" "lake" {
       type = "Delete"
     }
   }
+  depends_on = [google_project_service.apis]
 }
 
 # --- Warehouse -------------------------------------------------------------------------
@@ -52,6 +53,7 @@ resource "google_bigquery_dataset" "layer" {
   for_each   = toset(local.layers)
   dataset_id = each.value
   location   = var.bq_location
+  depends_on = [google_project_service.apis]
 }
 
 # Bronze is read in place: no load job, no second copy of the raw data. The schema is
@@ -93,16 +95,19 @@ resource "google_artifact_registry_repository" "pulse" {
       keep_count = 10
     }
   }
+  depends_on = [google_project_service.apis]
 }
 
 resource "google_service_account" "pipeline" {
   account_id   = "pulse-pipeline"
   display_name = "brand-pulse jobs: ingest and dbt"
+  depends_on   = [google_project_service.apis]
 }
 
 resource "google_service_account" "orchestrator" {
   account_id   = "pulse-orchestrator"
   display_name = "brand-pulse workflow and scheduler"
+  depends_on   = [google_project_service.apis]
 }
 
 # Least privilege: the jobs write the lake bucket and the layer datasets, nothing else
@@ -250,6 +255,7 @@ resource "google_cloud_scheduler_job" "pipeline" {
 resource "google_service_account" "dashboard" {
   account_id   = "pulse-dashboard"
   display_name = "brand-pulse dashboard: reads gold and config only"
+  depends_on   = [google_project_service.apis]
 }
 
 resource "google_bigquery_dataset_iam_member" "dashboard_reads" {
