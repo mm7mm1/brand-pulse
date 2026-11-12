@@ -9,3 +9,7 @@ output "image" {
 output "workflow" {
   value = google_workflows_workflow.pipeline.id
 }
+
+output "dashboard_url" {
+  value = google_cloud_run_v2_service.dashboard.uri
+}

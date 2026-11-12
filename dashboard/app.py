@@ -40,24 +40,46 @@ CATEGORY_LABELS = {
 st.set_page_config(page_title="Brand Pulse", page_icon="📈", layout="wide")
 
 
-USE_WAREHOUSE = Path(DB_PATH).exists()
-SOURCE = "local warehouse" if USE_WAREHOUSE else "daily snapshot, refreshed by GitHub Actions"
+# Set on Cloud Run: the dashboard reads gold straight from BigQuery
+BQ_PROJECT = os.environ.get("PULSE_BQ_PROJECT", "")
+USE_WAREHOUSE = not BQ_PROJECT and Path(DB_PATH).exists()
+if BQ_PROJECT:
+    SOURCE = f"BigQuery {BQ_PROJECT}"
+elif USE_WAREHOUSE:
+    SOURCE = "local warehouse"
+else:
+    SOURCE = "daily snapshot, refreshed by GitHub Actions"
 
 
 @st.cache_resource(ttl=3600)
 def snapshot() -> duckdb.DuckDBPyConnection:
-    """The published snapshot, loaded into an in-memory DuckDB under the warehouse's
-    table names - so every query below is the same SQL in both modes."""
+    """Gold from BigQuery or from the published snapshot, loaded into an in-memory DuckDB
+    under the warehouse's table names - so every query below is the same SQL in all modes.
+
+    The tables are a few thousand rows: copying them once an hour costs one small query
+    per table, where querying BigQuery on every widget change would cost one per click.
+    """
     con = duckdb.connect()
+    if BQ_PROJECT:
+        from google.cloud import bigquery
+
+        client = bigquery.Client(project=BQ_PROJECT)
     tmp = Path(tempfile.mkdtemp())
     for table, name in SNAPSHOT_TABLES.items():
+        con.execute(f"create schema if not exists {table.split('.')[0]}")
+        if BQ_PROJECT:
+            # Arrow, not pandas: DATE and TIMESTAMP arrive as native types
+            rows = client.query(f"select * from `{BQ_PROJECT}.{table}`").to_arrow()
+            con.register("rows", rows)
+            con.execute(f"create table {table} as select * from rows")
+            con.unregister("rows")
+            continue
         src = f"{SNAPSHOT_URL}/{name}.parquet"
         path = tmp / f"{name}.parquet"
         if src.startswith("http"):
             urllib.request.urlretrieve(src, path)
         else:
             path = Path(src)
-        con.execute(f"create schema if not exists {table.split('.')[0]}")
         con.execute(f"create table {table} as select * from read_parquet('{path}')")
     return con
 

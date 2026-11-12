@@ -19,7 +19,9 @@ variable "image_tag" {
 }
 
 variable "alert_email" {
-  type = string
+  description = "Where pipeline errors are emailed; empty = the alert still fires, visible in Monitoring"
+  type        = string
+  default     = ""
 }
 
 variable "daily_schedule" {

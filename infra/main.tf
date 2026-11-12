@@ -2,7 +2,10 @@ locals {
   services = [
     "artifactregistry.googleapis.com",
     "bigquery.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "iam.googleapis.com",
     "logging.googleapis.com",
     "monitoring.googleapis.com",
     "run.googleapis.com",
@@ -51,21 +54,28 @@ resource "google_bigquery_dataset" "layer" {
   location   = var.bq_location
 }
 
-# Bronze is read in place: no load job, no second copy of the raw data
+# Bronze is read in place: no load job, no second copy of the raw data. The schema is
+# explicit (the lake's PAGEVIEWS_SCHEMA) rather than autodetected, so the table can be
+# created before the first file lands and a drifting file fails the read loudly.
 resource "google_bigquery_table" "pageviews" {
   dataset_id          = google_bigquery_dataset.layer["bronze"].dataset_id
   table_id            = "pageviews"
   deletion_protection = false
 
+  schema = jsonencode([
+    { name = "brand_id", type = "STRING" },
+    { name = "wiki_project", type = "STRING" },
+    { name = "articles", type = "STRING" },
+    { name = "date", type = "DATE" },
+    { name = "views", type = "INTEGER" },
+    { name = "_loaded_at", type = "TIMESTAMP" },
+    { name = "_run_id", type = "STRING" },
+  ])
+
   external_data_configuration {
     source_format = "PARQUET"
-    autodetect    = true
+    autodetect    = false
     source_uris   = ["gs://${google_storage_bucket.lake.name}/pageviews/*.parquet"]
-
-    hive_partitioning_options {
-      mode              = "AUTO"
-      source_uri_prefix = "gs://${google_storage_bucket.lake.name}/pageviews/"
-    }
   }
 }
 
@@ -235,9 +245,78 @@ resource "google_cloud_scheduler_job" "pipeline" {
   }
 }
 
+# --- Dashboard -------------------------------------------------------------------------
+
+resource "google_service_account" "dashboard" {
+  account_id   = "pulse-dashboard"
+  display_name = "brand-pulse dashboard: reads gold and config only"
+}
+
+resource "google_bigquery_dataset_iam_member" "dashboard_reads" {
+  for_each   = toset(["gold", "config"])
+  dataset_id = google_bigquery_dataset.layer[each.value].dataset_id
+  role       = "roles/bigquery.dataViewer"
+  member     = "serviceAccount:${google_service_account.dashboard.email}"
+}
+
+resource "google_project_iam_member" "dashboard_jobs" {
+  project = var.project_id
+  role    = "roles/bigquery.jobUser"
+  member  = "serviceAccount:${google_service_account.dashboard.email}"
+}
+
+resource "google_cloud_run_v2_service" "dashboard" {
+  name                = "pulse-dashboard"
+  location            = var.region
+  deletion_protection = false
+  ingress             = "INGRESS_TRAFFIC_ALL"
+
+  template {
+    service_account = google_service_account.dashboard.email
+    # Streamlit keeps a websocket per browser session; affinity keeps it on one instance
+    session_affinity = true
+
+    scaling {
+      min_instance_count = 0 # scales to zero: costs nothing while nobody is looking
+      max_instance_count = 2
+    }
+
+    containers {
+      image   = local.image
+      command = ["streamlit", "run", "/app/dashboard/app.py"]
+      args = [
+        "--server.port=8080",
+        "--server.address=0.0.0.0",
+        "--server.headless=true",
+        "--browser.gatherUsageStats=false",
+      ]
+      ports {
+        container_port = 8080
+      }
+      env {
+        name  = "PULSE_BQ_PROJECT"
+        value = var.project_id
+      }
+      resources {
+        limits = { cpu = "1", memory = "1Gi" }
+      }
+    }
+  }
+  depends_on = [google_project_service.apis]
+}
+
+# A public demo: anyone with the link can open the dashboard (it shows public data only)
+resource "google_cloud_run_v2_service_iam_member" "dashboard_public" {
+  name     = google_cloud_run_v2_service.dashboard.name
+  location = var.region
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+
 # --- Alerting --------------------------------------------------------------------------
 
 resource "google_monitoring_notification_channel" "email" {
+  count        = var.alert_email == "" ? 0 : 1
   display_name = "brand-pulse on-call"
   type         = "email"
   labels       = { email_address = var.alert_email }
@@ -268,5 +347,5 @@ resource "google_monitoring_alert_policy" "pipeline_errors" {
     auto_close = "1800s"
   }
 
-  notification_channels = [google_monitoring_notification_channel.email.id]
+  notification_channels = google_monitoring_notification_channel.email[*].id
 }

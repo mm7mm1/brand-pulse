@@ -1,0 +1,12 @@
+# What `gcloud builds submit` must not upload: the image needs src, transform, dashboard
+.git
+.gitignore
+.venv/
+data/
+snapshot/
+infra/
+tests/
+transform/target/
+transform/logs/
+**/__pycache__/
+.idea/

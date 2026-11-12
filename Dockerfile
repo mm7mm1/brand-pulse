@@ -1,4 +1,5 @@
-# One image, two Cloud Run jobs: `pulse ingest` and `dbt build` (see infra/main.tf)
+# One image for the two Cloud Run jobs (`pulse ingest`, `dbt build`) and the dashboard
+# service (`streamlit run`) - see infra/main.tf
 FROM python:3.11-slim
 
 ENV PYTHONUNBUFFERED=1 \
@@ -9,9 +10,10 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 COPY pyproject.toml ./
 COPY src ./src
-RUN pip install ".[bigquery]"
+RUN pip install ".[bigquery,dashboard]"
 
 COPY transform ./transform
+COPY dashboard ./dashboard
 WORKDIR /app/transform
 RUN useradd --create-home pulse && chown -R pulse /app
 USER pulse

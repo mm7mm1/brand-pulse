@@ -106,14 +106,19 @@ Lineage graph: `make docs`.
 ## Deploy to Google Cloud
 
 ```bash
-cd infra
-terraform init -backend-config="bucket=<state-bucket>"
-terraform apply -var project_id=<project> -var alert_email=<email>
-gcloud builds submit .. --tag "$(terraform output -raw image)"
+gcloud storage buckets create gs://<project>-tfstate --location=US
+cd infra && terraform init -backend-config="bucket=<project>-tfstate"
+terraform apply -var project_id=<project> -target=google_project_service.apis \
+  -target=google_artifact_registry_repository.pulse          # APIs and the image registry first
+gcloud builds submit .. --tag us-central1-docker.pkg.dev/<project>/brand-pulse/brand-pulse:latest
+terraform apply -var project_id=<project> [-var alert_email=<email>]
+gcloud run jobs execute pulse-ingest --region us-central1 --args=ingest,--start,<YYYY-MM-DD> --wait
+gcloud workflows run brand-pulse --location us-central1     # dbt build + freshness
+terraform output dashboard_url
 ```
 
-The infrastructure is validated (`terraform validate`) but has not been applied: it
-needs a GCP project with billing.
+The dashboard runs as a Cloud Run service that reads `gold` from BigQuery (copied into
+an in-memory DuckDB once an hour, so a click costs no BigQuery query) and scales to zero.
 
 ## Repository layout
 
