@@ -9,3 +9,4 @@ transform/dbt_packages/
 *.tfstate*
 .DS_Store
 transform/.user.yml
+snapshot/

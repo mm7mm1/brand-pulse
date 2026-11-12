@@ -26,7 +26,8 @@ jobs:
       - name: dbt build on synthetic data
         run: |
           python tests/make_sample_lake.py data/lake
-          cd transform && dbt build --profiles-dir .
+          (cd transform && dbt build --profiles-dir .)
+          python dashboard/export_snapshot.py snapshot
 
   terraform:
     runs-on: ubuntu-latest

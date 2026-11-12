@@ -20,6 +20,9 @@ def main(argv: list[str] | None = None) -> None:
     ingest.add_argument("--start", type=date.fromisoformat)
     ingest.add_argument("--end", type=date.fromisoformat)
     ingest.add_argument("--brand", action="append", help="limit to brand_id (repeatable)")
+    ingest.add_argument(
+        "--strict", action="store_true", help="exit non-zero if any brand was skipped"
+    )
     sub.add_parser("check-registry", help="fail if a registry title is a Wikipedia redirect")
     args = parser.parse_args(argv)
 
@@ -39,7 +42,11 @@ def main(argv: list[str] | None = None) -> None:
     start, end = args.start or start, args.end or end
 
     client = WikiClient(limiter=RateLimiter(config.REQUESTS_PER_MINUTE))
-    run(brands, client, Lake(config.LAKE_URI), start, end, config.MAX_WORKERS)
+    summary = run(brands, client, Lake(config.LAKE_URI), start, end, config.MAX_WORKERS)
+    if args.strict and summary.failed:
+        # A publishing run must not ship a year with a brand missing; the daily run
+        # instead keeps going and lets the retry schedule fill the gap
+        raise SystemExit(f"--strict: skipped {summary.describe_failures()}")
 
 
 def check_registry(brands: list[config.Brand]) -> None:

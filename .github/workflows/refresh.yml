@@ -1,0 +1,56 @@
+name: refresh-snapshot
+
+# Rebuilds the last year from the API every morning and publishes the gold tables to the
+# `snapshot` branch, which the hosted dashboard reads. A failed step publishes nothing,
+# so the live dashboard keeps yesterday's snapshot.
+on:
+  schedule:
+    - cron: "30 7 * * *" # Wikimedia has published the previous day by then
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-snapshot
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -e ".[transform,dashboard]"
+
+      # The runner has no lake: ingestion is idempotent and a year is 18 API calls,
+      # so it is simply rebuilt. --strict: a skipped brand fails the run
+      - name: Ingest the last 365 days
+        run: pulse ingest --start "$(date -u -d '365 days ago' +%F)" --strict
+
+      - name: Check the registry titles
+        run: pulse check-registry
+
+      - name: dbt build (models, unit and data tests) and freshness
+        working-directory: transform
+        run: |
+          dbt build --profiles-dir .
+          dbt source freshness --profiles-dir .
+
+      - name: Export the gold snapshot
+        run: python dashboard/export_snapshot.py snapshot
+
+      # An orphan branch, force-pushed: it holds only the latest snapshot, so main's
+      # history stays clean and CI is not triggered by data
+      - name: Publish to the snapshot branch
+        working-directory: snapshot
+        run: |
+          git init -q -b snapshot
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -q -m "Snapshot through $(python -c 'import json; print(json.load(open("manifest.json"))["last_day"])')"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" snapshot

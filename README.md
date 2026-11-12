@@ -13,6 +13,11 @@ The same code runs in two modes:
 | Orchestration | `make pipeline` | Cloud Scheduler -> Workflows -> Cloud Run jobs |
 | Alerting | exit codes | log-based alert policy -> email |
 
+**Hosted demo.** A daily GitHub Action (`refresh.yml`) rebuilds the last year from the
+API, runs the dbt build with all its tests, and publishes the gold tables as parquet to
+the `snapshot` branch; the dashboard on Streamlit Community Cloud reads that snapshot.
+A failed step publishes nothing, so the live dashboard keeps the previous day.
+
 ## Architecture
 
 ```mermaid

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import tempfile
+import urllib.request
 from datetime import timedelta
 from pathlib import Path
 
@@ -14,6 +16,17 @@ import streamlit as st
 DB_PATH = os.environ.get(
     "PULSE_DUCKDB_PATH", str(Path(__file__).resolve().parents[1] / "data/warehouse.duckdb")
 )
+# Where the hosted app gets its data: the folder the daily GitHub Action publishes
+# (see dashboard/export_snapshot.py). A local path works too, for testing.
+SNAPSHOT_URL = os.environ.get(
+    "PULSE_SNAPSHOT_URL", "https://raw.githubusercontent.com/mm7mm1/brand-pulse/snapshot"
+)
+SNAPSHOT_TABLES = {
+    "config.brands": "brands",
+    "gold.fct_brand_daily": "fct_brand_daily",
+    "gold.fct_share_of_attention": "fct_share_of_attention",
+    "gold.fct_buzz_events": "fct_buzz_events",
+}
 # Categorical slots in fixed order. A brand keeps its slot (brand_id order inside its
 # category) whatever the filters, so its colour never changes between views.
 PALETTE = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"]
@@ -27,10 +40,39 @@ CATEGORY_LABELS = {
 st.set_page_config(page_title="Brand Pulse", page_icon="📈", layout="wide")
 
 
+USE_WAREHOUSE = Path(DB_PATH).exists()
+SOURCE = "local warehouse" if USE_WAREHOUSE else "daily snapshot, refreshed by GitHub Actions"
+
+
+@st.cache_resource(ttl=3600)
+def snapshot() -> duckdb.DuckDBPyConnection:
+    """The published snapshot, loaded into an in-memory DuckDB under the warehouse's
+    table names - so every query below is the same SQL in both modes."""
+    con = duckdb.connect()
+    tmp = Path(tempfile.mkdtemp())
+    for table, name in SNAPSHOT_TABLES.items():
+        src = f"{SNAPSHOT_URL}/{name}.parquet"
+        path = tmp / f"{name}.parquet"
+        if src.startswith("http"):
+            urllib.request.urlretrieve(src, path)
+        else:
+            path = Path(src)
+        con.execute(f"create schema if not exists {table.split('.')[0]}")
+        con.execute(f"create table {table} as select * from read_parquet('{path}')")
+    return con
+
+
 @st.cache_data(ttl=600)
 def query(sql: str, params: tuple = ()) -> pd.DataFrame:
-    with duckdb.connect(DB_PATH, read_only=True) as con:
-        return con.execute(sql, list(params)).df()
+    if USE_WAREHOUSE:
+        # Opened per query and closed: a long-lived handle would lock dbt out of the file
+        with duckdb.connect(DB_PATH, read_only=True) as con:
+            con.execute("set TimeZone = 'UTC'")
+            return con.execute(sql, list(params)).df()
+    # A cursor per query: Streamlit serves sessions from several threads
+    cur = snapshot().cursor()
+    cur.execute("set TimeZone = 'UTC'")
+    return cur.execute(sql, list(params)).df()
 
 
 brands = query(
@@ -45,7 +87,8 @@ last_day = meta.last_day[0].date() if hasattr(meta.last_day[0], "date") else met
 st.title("Brand Pulse")
 st.caption(
     "Share of attention across competing brands, from Wikipedia pageviews. "
-    f"Data through {last_day:%d %b %Y}, loaded {meta.loaded[0]:%d %b %H:%M} UTC."
+    f"Data through {last_day:%d %b %Y}, loaded {meta.loaded[0]:%d %b %H:%M} UTC "
+    f"({SOURCE})."
 )
 
 f1, f2, _ = st.columns([1, 1, 2])

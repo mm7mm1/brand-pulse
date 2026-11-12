@@ -1,0 +1,4 @@
+# Streamlit Community Cloud installs from the entrypoint's folder: the hosted app needs
+# only the dashboard's own dependencies, not ingestion or dbt
+streamlit==1.40.1
+duckdb==1.1.3
