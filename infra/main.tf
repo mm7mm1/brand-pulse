@@ -83,6 +83,23 @@ resource "google_bigquery_table" "pageviews" {
 
 # --- Images and service accounts -------------------------------------------------------
 
+data "google_project" "this" {}
+
+# `gcloud builds submit` runs as the Compute Engine default service account, and an
+# organization created since 2024 gives that account no roles - it cannot even read the
+# source it was just handed. These are the three it needs to build and push the image.
+resource "google_project_iam_member" "builder" {
+  for_each = toset([
+    "roles/storage.objectViewer",    # the uploaded source in <project>_cloudbuild
+    "roles/artifactregistry.writer", # push the image
+    "roles/logging.logWriter",       # build logs
+  ])
+  project    = var.project_id
+  role       = each.value
+  member     = "serviceAccount:${data.google_project.this.number}-compute@developer.gserviceaccount.com"
+  depends_on = [google_project_service.apis]
+}
+
 resource "google_artifact_registry_repository" "pulse" {
   location      = var.region
   repository_id = "brand-pulse"
@@ -276,6 +293,10 @@ resource "google_cloud_run_v2_service" "dashboard" {
   location            = var.region
   deletion_protection = false
   ingress             = "INGRESS_TRAFFIC_ALL"
+  # A public demo (public data only). Opened by switching the invoker check off rather
+  # than granting run.invoker to allUsers: organizations created since 2024 enforce
+  # domain-restricted sharing, which rejects an allUsers binding
+  invoker_iam_disabled = true
 
   template {
     service_account = google_service_account.dashboard.email
@@ -309,14 +330,6 @@ resource "google_cloud_run_v2_service" "dashboard" {
     }
   }
   depends_on = [google_project_service.apis]
-}
-
-# A public demo: anyone with the link can open the dashboard (it shows public data only)
-resource "google_cloud_run_v2_service_iam_member" "dashboard_public" {
-  name     = google_cloud_run_v2_service.dashboard.name
-  location = var.region
-  role     = "roles/run.invoker"
-  member   = "allUsers"
 }
 
 # --- Alerting --------------------------------------------------------------------------
