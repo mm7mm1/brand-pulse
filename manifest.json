@@ -1,0 +1,10 @@
+{
+  "last_day": "2026-11-20",
+  "loaded_at": "2026-11-21T15:31:29.207501+00:00",
+  "rows": {
+    "brands": 15,
+    "fct_brand_daily": 5775,
+    "fct_share_of_attention": 5775,
+    "fct_buzz_events": 149
+  }
+}
